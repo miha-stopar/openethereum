@@ -18,8 +18,10 @@
 
 extern crate rand_xorshift;
 
-use hash::{keccak, KECCAK_NULL_RLP};
+use bytes::Bytes;
+use hash::{keccak, KECCAK_EMPTY, KECCAK_NULL_RLP};
 use std::sync::{atomic::AtomicBool, Arc};
+use trie::Recorder;
 
 use super::helpers::StateProducer;
 use snapshot::{
@@ -32,14 +34,75 @@ use types::basic_account::BasicAccount;
 use error::{Error, ErrorKind};
 
 use self::rand_xorshift::XorShiftRng;
-use ethereum_types::H256;
+use ethereum_types::{H256, U256};
+use ethtrie::{SecTrieDBMut, TrieDB, TrieDBMut};
 use journaldb::{self, Algorithm};
 use kvdb_rocksdb::{Database, DatabaseConfig};
 use parking_lot::Mutex;
-use rand::SeedableRng;
+use rand::{Rng, SeedableRng};
 use tempdir::TempDir;
+use trie::{Trie, TrieMut};
 
 const RNG_SEED: [u8; 16] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+
+#[test]
+fn mpt() {
+    use hash_db::HashDB;
+    let mut producer = StateProducer::new();
+    let mut rng = XorShiftRng::from_seed(RNG_SEED);
+    let mut old_db = journaldb::new_memory_db();
+    let db_cfg = DatabaseConfig::with_columns(::db::NUM_COLUMNS);
+
+    for _ in 0..10 {
+        producer.tick(&mut rng, &mut old_db);
+    }
+
+    let state_root = producer.state_root();
+    let trie = TrieDB::new(&old_db, &state_root).unwrap();
+
+    let mut accounts: Vec<_> = {
+        let trie = TrieDB::new(&old_db, &state_root).unwrap();
+        let temp = trie
+            .iter()
+            .unwrap() // binding required due to complicated lifetime stuff
+            .filter(|_| rng.gen::<f32>() < 1f32)
+            .map(Result::unwrap)
+            .map(|(k, v)| (H256::from_slice(&k), v.to_owned()))
+            .collect();
+
+        temp
+    };
+
+    let (account_key, account_data) = &accounts[0];
+    let mut recorder = Recorder::new();
+
+    // see prove_account in src/state/mod.rs
+    let maybe_account: Option<BasicAccount> = {
+        let panicky_decoder = |bytes: &[u8]| {
+            ::rlp::decode(bytes).unwrap_or_else(|_| {
+                panic!(
+                    "prove_account, could not query trie for account key={}",
+                    &account_key
+                )
+            })
+        };
+        println!("{}", "adsfa");
+        let query = (&mut recorder, panicky_decoder);
+        trie.get_with(account_key.as_bytes(), query).unwrap()
+    };
+
+    let account = maybe_account.unwrap_or_else(|| BasicAccount {
+        balance: 0.into(),
+        // nonce: self.account_start_nonce,
+        nonce: U256::zero(),
+        code_hash: KECCAK_EMPTY,
+        storage_root: KECCAK_NULL_RLP,
+    });
+
+    let foo: Vec<Bytes> = recorder.drain().into_iter().map(|r| r.data).collect();
+
+    println!("{}", "adsfa");
+}
 
 #[test]
 fn snap_and_restore() {
