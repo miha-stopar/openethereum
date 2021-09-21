@@ -20,7 +20,13 @@ extern crate rand_xorshift;
 
 use bytes::Bytes;
 use hash::{keccak, KECCAK_EMPTY, KECCAK_NULL_RLP};
-use std::sync::{atomic::AtomicBool, Arc};
+use hash_db::Hasher;
+use keccak_hasher::KeccakHasher;
+use rlp::RlpStream;
+use std::{
+    str::FromStr,
+    sync::{atomic::AtomicBool, Arc},
+};
 use trie::Recorder;
 
 use super::helpers::StateProducer;
@@ -53,15 +59,72 @@ fn mpt() {
     let mut old_db = journaldb::new_memory_db();
     let db_cfg = DatabaseConfig::with_columns(::db::NUM_COLUMNS);
 
+    /*
     for _ in 0..10 {
         producer.tick(&mut rng, &mut old_db);
     }
+    */
 
-    let state_root = producer.state_root();
-    let trie = TrieDB::new(&old_db, &state_root).unwrap();
+    let mut state_root = producer.state_root();
+    let state_root2 = state_root.clone();
+    let olddb = old_db.clone();
+    // let trie = TrieDB::new(&old_db, &state_root).unwrap();
+    let mut trie = TrieDBMut::from_existing(&mut old_db, &mut state_root).unwrap();
 
+    let mut accs = vec![];
+    /*
+    let adds = vec!["ff74e91598aed6ae5d2fdcf8b24cd2c7be49a0808112a305069355b7160f23f9"];
+    let address_hash = H256::from_str(adds[0]).unwrap();
+    let gg = &address_hash[..];
+    let v = vec![0x20];
+    let vv = &v[..];
+    let con = [vv, gg].concat();
+    println!("{}", "---------------------------------------------------");
+    println!("{:?}", con);
+
+    let balance: usize = rng.gen();
+    let nonce: usize = rng.gen();
+    let acc1 = ::state::Account::new_basic(balance.into(), nonce.into()).rlp();
+    accs.push(acc1);
+
+    let mut stream = RlpStream::new_list(2);
+    stream.append(&con);
+    stream.append(&accs[0]);
+    */
+
+    let adds = vec![
+        "ff74e91598aed6ae5d2fdcf8b24cd2c7be49a0808112a305069355b7160f23f9",
+        "01cc888598aed6ae5d2fdcf8b24cd2c7be49a0808112a305069355b7160f23f9",
+    ];
+    for i in 0..adds.len() {
+        let balance: usize = rng.gen();
+        let nonce: usize = rng.gen();
+        let acc = ::state::Account::new_basic(balance.into(), nonce.into()).rlp();
+        accs.push(acc);
+    }
+    let mut stream = RlpStream::new_list(17);
+    for _ in 0..17 {
+        stream.append_empty_data();
+    }
+
+    let f = stream.drain();
+    let f1 = KeccakHasher::hash(&f);
+    println!("{}", "--- hash ---");
+    println!("{}", f1);
+
+    for i in 0..adds.len() {
+        // let address_hash = H256(rng.gen());
+        let acc = &accs[i];
+        let address_hash = H256::from_str(adds[i]).unwrap();
+        trie.insert(&address_hash[..], &acc).unwrap();
+
+        println!("{:?}", &address_hash[..]);
+        println!("{}", trie.root());
+    }
+
+    let trie = TrieDB::new(&olddb, &state_root2).unwrap();
     let mut accounts: Vec<_> = {
-        let trie = TrieDB::new(&old_db, &state_root).unwrap();
+        // let trie = TrieDB::new(&old_db, &state_root1).unwrap();
         let temp = trie
             .iter()
             .unwrap() // binding required due to complicated lifetime stuff
@@ -73,10 +136,11 @@ fn mpt() {
         temp
     };
 
+    // see prove_account in src/state/mod.rs
+
     let (account_key, account_data) = &accounts[0];
     let mut recorder = Recorder::new();
 
-    // see prove_account in src/state/mod.rs
     let maybe_account: Option<BasicAccount> = {
         let panicky_decoder = |bytes: &[u8]| {
             ::rlp::decode(bytes).unwrap_or_else(|_| {
@@ -91,6 +155,7 @@ fn mpt() {
         trie.get_with(account_key.as_bytes(), query).unwrap()
     };
 
+    /*
     let account = maybe_account.unwrap_or_else(|| BasicAccount {
         balance: 0.into(),
         // nonce: self.account_start_nonce,
@@ -98,6 +163,7 @@ fn mpt() {
         code_hash: KECCAK_EMPTY,
         storage_root: KECCAK_NULL_RLP,
     });
+    */
 
     let foo: Vec<Bytes> = recorder.drain().into_iter().map(|r| r.data).collect();
 

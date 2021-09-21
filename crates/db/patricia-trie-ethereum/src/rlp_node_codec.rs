@@ -101,9 +101,15 @@ impl NodeCodec<KeccakHasher> for RlpNodeCodec<KeccakHasher> {
 
     fn leaf_node(partial: &[u8], value: &[u8]) -> Vec<u8> {
         let mut stream = RlpStream::new_list(2);
+
+        println!("{}", "=========== leaf =============");
+        println!("{:?}", partial.to_vec());
+
         stream.append(&partial);
         stream.append(&value);
-        stream.drain()
+        let foo = stream.drain();
+
+        foo
     }
 
     fn ext_node(
@@ -127,13 +133,20 @@ impl NodeCodec<KeccakHasher> for RlpNodeCodec<KeccakHasher> {
     where
         I: IntoIterator<Item = Option<ChildReference<<KeccakHasher as Hasher>::Out>>>,
     {
+        println!("{}", "=========== branch =============");
         let mut stream = RlpStream::new_list(17);
         for child_ref in children {
             match child_ref {
                 Some(c) => match c {
-                    ChildReference::Hash(h) => stream.append(&h),
+                    ChildReference::Hash(h) => {
+                        println!("{}", "== ChildReference::Hash ==");
+                        println!("{}", h);
+                        stream.append(&h)
+                    }
                     ChildReference::Inline(inline_data, len) => {
+                        println!("{}", "== ChildReference::Inline ==");
                         let bytes = &AsRef::<[u8]>::as_ref(&inline_data)[..len];
+                        println!("{:?}", bytes);
                         stream.append_raw(bytes, 1)
                     }
                 },
@@ -145,6 +158,7 @@ impl NodeCodec<KeccakHasher> for RlpNodeCodec<KeccakHasher> {
         } else {
             stream.append_empty_data();
         }
+        println!("{}", "=========== end branch =============");
         stream.drain()
     }
 }
