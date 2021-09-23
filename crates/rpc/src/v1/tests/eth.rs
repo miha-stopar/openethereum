@@ -217,6 +217,7 @@ fn eth_get_proof() {
     let chain = extract_chain!("BlockchainTests/ValidBlocks/bcWalletTest/wallet2outOf3txs");
     let tester = EthTester::from_chain(&chain);
     // final account state
+
     let req_latest = r#"{
 		"jsonrpc": "2.0",
 		"method": "eth_getProof",

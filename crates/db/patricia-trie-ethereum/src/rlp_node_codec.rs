@@ -159,6 +159,12 @@ impl NodeCodec<KeccakHasher> for RlpNodeCodec<KeccakHasher> {
             stream.append_empty_data();
         }
         println!("{}", "=========== end branch =============");
-        stream.drain()
+        let foo = stream.drain();
+
+        println!("{:?}", foo);
+        let f1 = KeccakHasher::hash(&foo);
+        println!("{:?}", f1);
+
+        foo
     }
 }

@@ -22,11 +22,13 @@ use bytes::Bytes;
 use hash::{keccak, KECCAK_EMPTY, KECCAK_NULL_RLP};
 use hash_db::Hasher;
 use keccak_hasher::KeccakHasher;
+use kvdb::DBValue;
 use rlp::RlpStream;
 use std::{
     str::FromStr,
     sync::{atomic::AtomicBool, Arc},
 };
+use trie::NibbleSlice;
 use trie::Recorder;
 
 use super::helpers::StateProducer;
@@ -72,54 +74,100 @@ fn mpt() {
     let mut trie = TrieDBMut::from_existing(&mut old_db, &mut state_root).unwrap();
 
     let mut accs = vec![];
-    /*
-    let adds = vec!["ff74e91598aed6ae5d2fdcf8b24cd2c7be49a0808112a305069355b7160f23f9"];
-    let address_hash = H256::from_str(adds[0]).unwrap();
-    let gg = &address_hash[..];
+
+    // let adds = vec!["ff74e91598aed6ae5d2fdcf8b24cd2c7be49a0808112a305069355b7160f23f9"];
+    let adds = vec!["0000000000000000000000000000000000000000000000000000000000000001"];
+    let address = H256::from_str(adds[0]).unwrap();
+    let gg = &address[..];
     let v = vec![0x20];
     let vv = &v[..];
     let con = [vv, gg].concat();
     println!("{}", "---------------------------------------------------");
     println!("{:?}", con);
 
-    let balance: usize = rng.gen();
-    let nonce: usize = rng.gen();
+    let balance: usize = 22;
+    let nonce: usize = 0;
     let acc1 = ::state::Account::new_basic(balance.into(), nonce.into()).rlp();
+
+    println!("{}", "--- account ---");
+    println!("{:?}", acc1);
     accs.push(acc1);
 
     let mut stream = RlpStream::new_list(2);
-    stream.append(&con);
-    stream.append(&accs[0]);
+
+    let a = vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
+    let f1 = KeccakHasher::hash(&a);
+    println!("{}", "--- hash addr ---");
+    println!("{}", f1);
+    println!("{:?}", f1.as_bytes());
+
+    let bb = f1.as_bytes();
+    let mut nibbles = vec![];
+    for b in bb {
+        nibbles.push(b / 16);
+        nibbles.push(b % 16);
+    }
+    nibbles.push(16);
+
+    println!("{}", "--- nibbles ---");
+    println!("{:?}", nibbles);
+
+    /*
+    let n = NibbleSlice::new(f1.as_bytes());
+    let n0 = n.at(0);
+    let n1 = n.at(1);
+    let n2 = n.at(2);
+    println!("{:?} {:?} {:?}", n0, n1, n2);
+    let nn = n.encoded(true);
+    println!("{:?}", nn);
     */
 
+    // stream.append(&address[..].to_vec());
+    stream.append(&con);
+    stream.append(&accs[0]);
+
+    /*
     let adds = vec![
         "ff74e91598aed6ae5d2fdcf8b24cd2c7be49a0808112a305069355b7160f23f9",
-        "01cc888598aed6ae5d2fdcf8b24cd2c7be49a0808112a305069355b7160f23f9",
+        "f1cc888598aed6ae5d2fdcf8b24cd2c7be49a0808112a305069355b7160f23f9",
     ];
+    let balances = vec![22, rng.gen()];
+    let nonces = vec![0, 0];
+
     for i in 0..adds.len() {
-        let balance: usize = rng.gen();
-        let nonce: usize = rng.gen();
-        let acc = ::state::Account::new_basic(balance.into(), nonce.into()).rlp();
+        // let balance: usize = rng.gen();
+        // let nonce: usize = rng.gen();
+        let acc = ::state::Account::new_basic(balances[i].into(), nonces[i].into()).rlp();
+
+        println!("{}", "--- account ---");
+        println!("{:?}", acc);
+
         accs.push(acc);
     }
     let mut stream = RlpStream::new_list(17);
     for _ in 0..17 {
         stream.append_empty_data();
     }
+    */
 
     let f = stream.drain();
     let f1 = KeccakHasher::hash(&f);
     println!("{}", "--- hash ---");
     println!("{}", f1);
+    println!("{:?}", f1.as_bytes());
 
     for i in 0..adds.len() {
-        // let address_hash = H256(rng.gen());
         let acc = &accs[i];
-        let address_hash = H256::from_str(adds[i]).unwrap();
-        trie.insert(&address_hash[..], &acc).unwrap();
+        let address = H256::from_str(adds[i]).unwrap();
+        trie.insert(&address[..], &acc).unwrap();
 
-        println!("{:?}", &address_hash[..]);
-        println!("{}", trie.root());
+        println!("{}", "address ----------");
+        println!("{:?}", &address[..]);
+        let r = trie.root();
+        let f = H256::as_bytes(r);
+        println!("{:?}", "------__---------");
+        println!("{:?}", f);
+        println!("{}", r);
     }
 
     let trie = TrieDB::new(&olddb, &state_root2).unwrap();
